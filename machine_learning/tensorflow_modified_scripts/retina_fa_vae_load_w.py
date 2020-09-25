@@ -14,9 +14,10 @@ import time
 import imageio
 import glob
 import contextlib
+
 #import tensorflow_probability as tfp
 
-print("******************* version env:", tf.version) 
+# Constants
 os.environ['TF_GPU_HOST_MEM_LIMIT_IN_MB'] = '12000'
 tf.config.experimental.set_lms_enabled(True)    
 tf.config.experimental.set_lms_defrag_enabled(True) 
@@ -58,66 +59,6 @@ image_itr = img_gen.flow_from_directory(directory=images_home_dir,
         target_size=(img_height_pixels, img_width_pixels), 
         batch_size=g_batch_size, shuffle=True,
         class_mode=None)
-        
-# list_ds = tf.data.Dataset.from_generator(
-#     img_gen.flow_from_directory, args=(images_home_dir, 
-#     (img_height_pixels, img_width_pixels)), 
-#     output_types=(tf.float32), 
-#     output_shapes=([imgs_to_load, img_height_pixels, img_width_pixels, g_input_channels])
-# )
-
-image_count = imgs_to_load
-
-'''
-data_dir = pathlib.Path(images_home_dir)
-image_count = len(list(data_dir.glob('*.jpeg')))
-
-# Create datasets
-list_ds = tf.data.Dataset.list_files(str(data_dir/'*.jpeg'), shuffle=True)
-list_ds = list_ds.shuffle(image_count, reshuffle_each_iteration=True)
-'''
-
-# Warning: Always shuffle for improved generation quality
-#list_ds.shuffle(image_count, reshuffle_each_iteration=True)
-'''
-val_size = int(image_count * 0.2)
-train_ds = list_ds.skip(val_size)
-val_ds = list_ds.take(val_size)
-'''
-
-def decode_img(img, input_channels = 3):
-  # convert the compressed string to a 3D uint8 tensor
-  img = tf.image.decode_jpeg(img, channels=input_channels)
-  # resize the image to the desired size
-  return tf.image.resize(img, [img_height_pixels, img_width_pixels])
-  # return img
-
-def preprocess_image(image):
-  image = image / 255.
-  return tf.dtypes.cast(image, tf.float32)
-
-def process_path(file_path):
-  # load the raw data from the file as a string
-  img = tf.io.read_file(file_path)
-  img = decode_img(img)
-  img = preprocess_image (img)
-  
-  return img
-
-# Set `num_parallel_calls` so multiple images are loaded/processed in parallel.
-'''
-train_dataset = train_ds.map(process_path, num_parallel_calls=tf.data.experimental.AUTOTUNE)
-test_dataset = val_ds.map(process_path, num_parallel_calls=tf.data.experimental.AUTOTUNE)
-'''
-
-# for image, label in train_ds.take(-1):
-#   print("Image shape: ", image.numpy().shape)
-#   print("Label: ", label.numpy())
-#   print ("pixel sample", image [1000, 1000, :])
-'''
-train_dataset = train_dataset.batch(g_batch_size)
-test_dataset = test_dataset.batch(g_batch_size)
-'''
 
 class CVAE(tf.keras.Model):
   """Convolutional variational autoencoder."""
@@ -185,7 +126,6 @@ class CVAE(tf.keras.Model):
       eps = tf.random.normal(shape=(100, self.latent_dim))
     return self.decode(eps, apply_sampling=True)
 
-  @tf.function
   def encode(self, x):
     mean, logvar = tf.split(self.encoder(x), num_or_size_splits=2, axis=1)
     return mean, logvar
@@ -210,35 +150,8 @@ class CVAE(tf.keras.Model):
 
 optimizer = tf.keras.optimizers.Adam(1e-4)
 
-
-def log_normal_pdf(sample, mean, logvar, raxis=1):
-  log2pi = tf.math.log(2. * np.pi)
-  
-  if raxis == None:
-    ret = -.5 * ((sample - mean) ** 2. * tf.exp(-logvar) + logvar + log2pi)
-    ret = tf.clip_by_value(ret, clip_value_min=-1e6, clip_value_max=0)
-  else:
-    ret = tf.reduce_sum(
-      -.5 * ((sample - mean) ** 2. * tf.exp(-logvar) + logvar + log2pi),
-      axis=raxis)       
-  
-  return ret
-
-def compute_loss(model, x):
-  mean, logvar = model.encode(x)
-  mean = tf.dtypes.cast(mean, dtype=tf.float32)
-  logvar = tf.dtypes.cast(logvar, dtype=tf.float32)
-  z = model.reparameterize(mean, logvar)
-  x_dec_mean, x_dec_logvar = model.decode(z)
-  #   x_logit = model.decode(z)
-  #   cross_ent = tf.nn.sigmoid_cross_entropy_with_logits(logits=x_logit, labels=x)
-  logpx_z_tmp = log_normal_pdf(x, x_dec_mean, x_dec_logvar, raxis=None)
-  logpx_z = tf.reduce_sum(logpx_z_tmp, axis=[1, 2, 3])
-  #   tf.print("logpx_z gauss=", logpx_z)
-  logpz = log_normal_pdf(z, 0., 0.)
-  logqz_x = log_normal_pdf(z, mean, logvar)
-  #   tf.print ("logpz=", logpz)
-  return -tf.reduce_mean(logpx_z + logpz - logqz_x)
+# set the dimensionality of the latent space to a plane for visualization later
+latent_dim = 40
 
 @contextlib.contextmanager
 def options(options):
@@ -252,37 +165,7 @@ def options(options):
 old_opts = tf.config.optimizer.get_experimental_options()
 print ("********Old Options**********", old_opts)
 
-@tf.function
-def train_step(model, x, optimizer):
-  """Executes one training step and returns the loss.
-
-  This function computes the loss and gradients, and uses the latter to
-  update the model's parameters.
-  """
-  
-  with tf.GradientTape() as tape:
-    loss = compute_loss(model, x)
-    
-  gradients = tape.gradient(loss, model.trainable_variables)
-  optimizer.apply_gradients(zip(gradients, model.trainable_variables))
-
-epochs = 400
-# set the dimensionality of the latent space to a plane for visualization later
-latent_dim = 40
-num_examples_to_generate = 2
-
-# keeping the random vector constant for generation (prediction) so
-# it will be easier to see the improvement.
-random_vector_for_generation = tf.random.normal(
-    shape=[num_examples_to_generate, latent_dim])
 model = CVAE(latent_dim, g_input_channels)
-
-# sess = tf.keras.backend.get_session()
-# init = tf.compat.v1.global_variables_initializer()
-# sess.run(init)
-# from tensorflow.python.keras.backend import set_session
-# set_session(sess)
-
 
 def generate_and_save_images(model, epoch, test_sample):
   with options({'memory': True}):  
@@ -323,90 +206,6 @@ def generate_and_save_images(model, epoch, test_sample):
   plt.savefig('ref_image_at_epoch_{:04d}.jpg'.format(epoch))
   #    plt.show()
   plt.close(fig)
-
-# Pick a sample of the test set for generating output images
-assert g_batch_size >= num_examples_to_generate
-
-'''
-for test_batch in test_dataset.take(1):  
-  test_sample = test_batch[0:num_examples_to_generate, :, :, :]
-'''
-
-def display_image(epoch_no):
-  return PIL.Image.open('image_at_epoch_{:04d}.jpg'.format(epoch_no))
-
-#@tf.function
-def train_op ():
-    test_sample = next(image_itr)
-    generate_and_save_images(model, 0, test_sample)
-
-    for epoch in range(1, epochs + 1):
-      start_time = time.time()
-      '''
-      for train_x in train_dataset:
-        train_step(model, train_x, optimizer)
-      '''
-      image_itr.reset()  
-        
-      for step in range(g_train_batches):
-        # with tf.profiler.experimental.Trace('train', step_num=step, _r=1):
-        batch = next(image_itr)
-        train_step(model, batch, optimizer)
-        
-      end_time = time.time()
-      loss = tf.keras.metrics.Mean()
-      '''
-      for test_x in test_dataset:
-        loss(compute_loss(model, test_x))
-      '''
-      for i in range(g_test_batches):
-        batch = next(image_itr)  
-        loss(compute_loss(model, batch))
-          
-      elbo = -loss.result()
-        
-      display.clear_output(wait=False)
-      tf.print('****Epoch: {}, Test set ELBO: {}, time elapse for current epoch: {}'
-          .format(epoch, elbo, end_time - start_time))
-      # Extract random test sample
-      generate_and_save_images(model, epoch, test_sample)
-      
-    plt.imshow(display_image(epoch))
-    plt.axis('off')  # Display images  
-
-# tf.profiler.experimental.start('/mnt/home/davidolave/git/artificial_intelligence/machine_learning/',
-#     options = tf.profiler.experimental.ProfilerOptions(
-#               host_tracer_level=3, python_tracer_level=1, device_tracer_level=1))
-#with tf.Session() as sess:
-train_op()
-# tf.profiler.experimental.stop()
-
-
-# with sv.managed_session() as sess:
-  # Train normally
-#   sess.run(train_op)
-
-anim_file = 'cvae.gif'
-
-with imageio.get_writer(anim_file, mode='I') as writer:
-  filenames = glob.glob('image*.jpg')
-  filenames = sorted(filenames)
-  last = -1
-  for i, filename in enumerate(filenames):
-    frame = 2*(i**0.5)
-    if round(frame) > round(last):
-      last = frame
-    else:
-      continue
-    image = imageio.imread(filename)
-    writer.append_data(image)
-  image = imageio.imread(filename)
-  writer.append_data(image)
-
-
-import IPython
-if IPython.version_info >= (6, 2, 0, ''):
-  display.Image(filename=anim_file)  
   
 def plot_latent_images(model, n, img_height = img_height_pixels,
                         img_width = img_width_pixels, latent_dim=2,
@@ -414,13 +213,15 @@ def plot_latent_images(model, n, img_height = img_height_pixels,
   """Plots n x n digit images decoded from the latent space."""
 
   #norm = tfp.distributions.Normal(0, 1)
-  #grid_x = norm.quantile(np.linspace(0.05, 0.95, n))
+  # grid_x = norm.quantile(np.linspace(0.05, 0.95, n))
+  # grid_x = norm.sample(n)
   grid_x = np.random.normal(0, 1, n)
   grid_x = tf.reshape(grid_x, [grid_x.shape[0], 1])
   grid_x = tf.broadcast_to(grid_x, [grid_x.shape[0], 
             tf.dtypes.cast(latent_dim, dtype=tf.uint32)])
-  #grid_y = norm.quantile(np.linspace(0.05, 0.95, n))
+  # grid_y = norm.quantile(np.linspace(0.05, 0.95, n))
   grid_y = np.random.normal(0, 1, n)
+  #grid_y = norm.sample(n)
   grid_y = tf.reshape(grid_y, [grid_y.shape[0], 1])
   grid_y = tf.broadcast_to(grid_y, [grid_y.shape[0],
             tf.dtypes.cast(latent_dim, dtype=tf.uint32)])
@@ -438,12 +239,19 @@ def plot_latent_images(model, n, img_height = img_height_pixels,
       image_set[i * img_height: (i + 1) * img_height,
         j * img_width: (j + 1) * img_width, :] = digit.numpy()
 
-  plt.figure(figsize=(10, 10))
+  plt.figure(figsize=(n, n))
   plt.imshow(image_set)
   plt.axis('Off')
   plt.show()
   plt.savefig('image_manifold.jpg')
 
-model.save_weights('./retina_vae_weights')
-plot_latent_images(model, 2, img_height_pixels, 
+model.load_weights('./retin_vae_w_lat_dim40_epochs400')
+for i in range(g_train_batches):
+    plot_latent_images(model, 2, img_height_pixels, 
                    img_width_pixels, latent_dim)
+
+# for i in range(g_train_batches):
+#     test_sample = next(image_itr)
+#     generate_and_save_images(model, i, test_sample)
+    
+    
