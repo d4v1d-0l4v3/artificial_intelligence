@@ -15,7 +15,7 @@ import imageio
 import glob
 import contextlib
 
-#import tensorflow_probability as tfp
+# import tensorflow_probability as tfp
 
 # Constants
 os.environ['TF_GPU_HOST_MEM_LIMIT_IN_MB'] = '12000'
@@ -23,7 +23,7 @@ tf.config.experimental.set_lms_enabled(True)
 tf.config.experimental.set_lms_defrag_enabled(True) 
 
 # Constants
-images_home_dir = '/media/davidolave/My Passport/datasets/retina/diabetic-retinopathy-detection/test_main'
+images_home_dir = '/media/davidolave/My Passport/datasets/retina/diabetic-retinopathy-detection/test_images'
 img_height_pixels = 512 # 3168
 img_width_pixels = 512 # 4752
 g_input_channels = 3  # RGB pixels

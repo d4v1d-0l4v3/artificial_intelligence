@@ -1,0 +1,11 @@
+# LD_LIBRARY_PATH=/home/davidolave/.local/lib/python3.10/site-packages/tensorrt_libs:/usr/lib/x86_64-linux-gnu/:/usr/local/cuda/lib64:/opt/openssl/lib:/usr/lib/gcc/x86_64-linux-gnu/11
+
+# ANACONDA_AI1_PATH=~/anaconda3/envs/ai1
+# LD_LIBRARY_PATH=${ANACONDA_AI1_PATH}/lib:/opt/openssl/lib:
+
+# PATH=${ANACONDA_AI1_PATH}/bin:/home/davidolave/anaconda3/bin:/home/davidolave/.local/bin:/home/davidolave/bin:/home/davidolave//bazelist_bin_dir:/opt/openssl/bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin:/usr/games:/usr/local/games:/snap/bin:/snap/bin
+
+export XLA_FLAGS=--xla_gpu_cuda_data_dir=/home/davidolave/anaconda3/envs/ai1/lib
+
+# conda create --name ai1 tensorflow-gpu=2.12.1 -c conda-forge -y
+

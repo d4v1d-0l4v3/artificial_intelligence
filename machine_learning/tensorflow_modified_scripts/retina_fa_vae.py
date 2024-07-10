@@ -16,13 +16,15 @@ import glob
 import contextlib
 #import tensorflow_probability as tfp
 
-print("******************* version env:", tf.version) 
+print("******************* version env:", tf.version)
 os.environ['TF_GPU_HOST_MEM_LIMIT_IN_MB'] = '12000'
-tf.config.experimental.set_lms_enabled(True)    
-tf.config.experimental.set_lms_defrag_enabled(True) 
+# Test uncomment
+# tf.config.experimental.set_lms_enabled(True)
+# tf.config.experimental.set_lms_defrag_enabled(True)
+# End test uncomment
 
 # Constants
-images_home_dir = '/media/davidolave/My Passport/datasets/retina/diabetic-retinopathy-detection/test_main'
+images_home_dir = '/media/davidolave/My Passport/datasets/retina/diabetic-retinopathy-detection/test_images'
 img_height_pixels = 512 # 3168
 img_width_pixels = 512 # 4752
 g_input_channels = 3  # RGB pixels
@@ -45,8 +47,8 @@ MIN_BATCHES = 1 # Min allowed batches number
 g_batches = g_batches_tf
 g_test_batches = g_test_batches_tf
 g_train_batches = g_train_batches_tf
-    
-  
+
+
 # assert g_batches > MIN_BATCHES
 # assert g_train_batches > MIN_BATCHES
 # assert g_test_batches > MIN_BATCHES
@@ -54,11 +56,11 @@ g_train_batches = g_train_batches_tf
 img_gen = tf.keras.preprocessing.image.ImageDataGenerator(rescale=1./255)
 
 # Creates image iterator
-image_itr = img_gen.flow_from_directory(directory=images_home_dir, 
-        target_size=(img_height_pixels, img_width_pixels), 
+image_itr = img_gen.flow_from_directory(directory=images_home_dir,
+        target_size=(img_height_pixels, img_width_pixels),
         batch_size=g_batch_size, shuffle=True,
         class_mode=None)
-        
+
 # list_ds = tf.data.Dataset.from_generator(
 #     img_gen.flow_from_directory, args=(images_home_dir, 
 #     (img_height_pixels, img_width_pixels)), 
@@ -101,7 +103,7 @@ def process_path(file_path):
   img = tf.io.read_file(file_path)
   img = decode_img(img)
   img = preprocess_image (img)
-  
+
   return img
 
 # Set `num_parallel_calls` so multiple images are loaded/processed in parallel.
@@ -127,7 +129,7 @@ class CVAE(tf.keras.Model):
     self.latent_dim = latent_dim
     self.encoder = tf.keras.Sequential(
         [
-            tf.keras.layers.InputLayer(input_shape=(img_height_pixels, img_width_pixels, 
+            tf.keras.layers.InputLayer(input_shape=(img_height_pixels, img_width_pixels,
                 input_channels)),
             tf.keras.layers.Conv2D(
                 filters=32, kernel_size=3, strides=(2, 2), activation='relu'),
@@ -135,16 +137,16 @@ class CVAE(tf.keras.Model):
             tf.keras.layers.Conv2D(
                 filters=64, kernel_size=3, strides=(2, 2), activation='relu'),
                 # filters=8, kernel_size=8, strides=(4, 4), activation='relu'),
-            tf.keras.layers.MaxPooling2D(pool_size=(2, 2), strides=(2, 2), 
+            tf.keras.layers.MaxPooling2D(pool_size=(2, 2), strides=(2, 2),
                 padding='same'),
-            
+
             tf.keras.layers.Conv2D(
                 filters=64, kernel_size=3, strides=(2, 2), activation='relu'),
-            
-            tf.keras.layers.MaxPooling2D(pool_size=(5, 5), strides=(1, 1), 
+
+            tf.keras.layers.MaxPooling2D(pool_size=(5, 5), strides=(1, 1),
                 padding='same'),
-            
-            tf.keras.layers.Flatten(),            
+
+            tf.keras.layers.Flatten(),
             # No activation
             tf.keras.layers.Dense(latent_dim + latent_dim),
             tf.keras.layers.Dense(latent_dim + latent_dim)
@@ -155,7 +157,7 @@ class CVAE(tf.keras.Model):
         [
             tf.keras.layers.InputLayer(input_shape=(latent_dim,)),
             tf.keras.layers.Dense(units= latent_dim, activation=tf.nn.relu),
-            tf.keras.layers.Dense(units= (img_height_pixels >> 2) * 
+            tf.keras.layers.Dense(units= (img_height_pixels >> 2) *
                         (img_width_pixels >> 2) * 64,
             #tf.keras.layers.Dense(units= (img_height_pixels >> 4) * (img_width_pixels >> 4) * 4,
                activation=tf.nn.relu),
@@ -195,17 +197,17 @@ class CVAE(tf.keras.Model):
     return eps * tf.exp(logvar * .5) + mean
 
   def decode(self, z, apply_sampling=False):
-      
+
     mean, logvar = tf.split(self.decoder(z), num_or_size_splits=2, axis=3)
 
 #     mean = self.decoder(z)
-#     logvar = mean 
-    
+#     logvar = mean
+
 #     logits = self.decoder(z)
     if apply_sampling:
 #       sample = self.reparameterize(mean, logvar)
       return mean
-  
+
     return mean, logvar
 
 optimizer = tf.keras.optimizers.Adam(1e-4)
@@ -213,15 +215,15 @@ optimizer = tf.keras.optimizers.Adam(1e-4)
 
 def log_normal_pdf(sample, mean, logvar, raxis=1):
   log2pi = tf.math.log(2. * np.pi)
-  
+
   if raxis == None:
     ret = -.5 * ((sample - mean) ** 2. * tf.exp(-logvar) + logvar + log2pi)
     ret = tf.clip_by_value(ret, clip_value_min=-1e6, clip_value_max=0)
   else:
     ret = tf.reduce_sum(
       -.5 * ((sample - mean) ** 2. * tf.exp(-logvar) + logvar + log2pi),
-      axis=raxis)       
-  
+      axis=raxis)
+
   return ret
 
 def compute_loss(model, x):
@@ -259,14 +261,15 @@ def train_step(model, x, optimizer):
   This function computes the loss and gradients, and uses the latter to
   update the model's parameters.
   """
-  
+
   with tf.GradientTape() as tape:
     loss = compute_loss(model, x)
-    
+
   gradients = tape.gradient(loss, model.trainable_variables)
   optimizer.apply_gradients(zip(gradients, model.trainable_variables))
 
-epochs = 400
+
+epochs = 20
 # set the dimensionality of the latent space to a plane for visualization later
 latent_dim = 40
 num_examples_to_generate = 2
@@ -285,20 +288,20 @@ model = CVAE(latent_dim, g_input_channels)
 
 
 def generate_and_save_images(model, epoch, test_sample):
-  with options({'memory': True}):  
+  with options({'memory': True}):
     mean, logvar = model.encode(test_sample)
     z = model.reparameterize(mean, logvar)
     predictions = model.sample(z)
-  
+
   display_images = test_sample.shape[0]
   if display_images <= 0:
     display_images = 1
-  
+
   h_mgs_no = display_images  # Hieght in images
   w_mgs_no = display_images  # Width in images
   fig = plt.figure(figsize=(h_mgs_no, w_mgs_no))
 
-  for i in range(predictions.shape[0]):    
+  for i in range(predictions.shape[0]):
     plt.subplot(h_mgs_no, w_mgs_no, i + 1)
     #with tf.Session() as sess_tmp:
     #pred_array = predictions[i, :, :, :]
@@ -311,10 +314,10 @@ def generate_and_save_images(model, epoch, test_sample):
   plt.savefig('image_at_epoch_{:04d}.jpg'.format(epoch))
   #plt.show()
   plt.close(fig)
-  
+
   fig = plt.figure(figsize=(h_mgs_no, w_mgs_no))
 
-  for i in range(test_sample.shape[0]):    
+  for i in range(test_sample.shape[0]):
     plt.subplot(h_mgs_no, w_mgs_no, i + 1)
     plt.imshow(test_sample[i, :, :, :])
     plt.axis('off')
@@ -346,13 +349,13 @@ def train_op ():
       for train_x in train_dataset:
         train_step(model, train_x, optimizer)
       '''
-      image_itr.reset()  
-        
+      image_itr.reset()
+
       for step in range(g_train_batches):
         # with tf.profiler.experimental.Trace('train', step_num=step, _r=1):
         batch = next(image_itr)
         train_step(model, batch, optimizer)
-        
+
       end_time = time.time()
       loss = tf.keras.metrics.Mean()
       '''
@@ -360,17 +363,17 @@ def train_op ():
         loss(compute_loss(model, test_x))
       '''
       for i in range(g_test_batches):
-        batch = next(image_itr)  
+        batch = next(image_itr)
         loss(compute_loss(model, batch))
-          
+
       elbo = -loss.result()
-        
+
       display.clear_output(wait=False)
       tf.print('****Epoch: {}, Test set ELBO: {}, time elapse for current epoch: {}'
           .format(epoch, elbo, end_time - start_time))
       # Extract random test sample
       generate_and_save_images(model, epoch, test_sample)
-      
+
     plt.imshow(display_image(epoch))
     plt.axis('off')  # Display images  
 
@@ -406,8 +409,8 @@ with imageio.get_writer(anim_file, mode='I') as writer:
 
 import IPython
 if IPython.version_info >= (6, 2, 0, ''):
-  display.Image(filename=anim_file)  
-  
+  display.Image(filename=anim_file)
+
 def plot_latent_images(model, n, img_height = img_height_pixels,
                         img_width = img_width_pixels, latent_dim=2,
                         channels = 3):
@@ -417,7 +420,7 @@ def plot_latent_images(model, n, img_height = img_height_pixels,
   #grid_x = norm.quantile(np.linspace(0.05, 0.95, n))
   grid_x = np.random.normal(0, 1, n)
   grid_x = tf.reshape(grid_x, [grid_x.shape[0], 1])
-  grid_x = tf.broadcast_to(grid_x, [grid_x.shape[0], 
+  grid_x = tf.broadcast_to(grid_x, [grid_x.shape[0],
             tf.dtypes.cast(latent_dim, dtype=tf.uint32)])
   #grid_y = norm.quantile(np.linspace(0.05, 0.95, n))
   grid_y = np.random.normal(0, 1, n)
@@ -444,6 +447,8 @@ def plot_latent_images(model, n, img_height = img_height_pixels,
   plt.show()
   plt.savefig('image_manifold.jpg')
 
-model.save_weights('./retina_vae_weights')
-plot_latent_images(model, 2, img_height_pixels, 
+
+# model.save_weights('./retina_vae_weights')
+model.save_weights('./retina_vae_weights_test_delete')
+plot_latent_images(model, 2, img_height_pixels,
                    img_width_pixels, latent_dim)
