@@ -11,6 +11,7 @@ from tensorflow.keras.regularizers import l2
 from tensorflow.keras.layers import RandomFlip, RandomRotation, RandomZoom
 from tensorflow.keras import mixed_precision
 import numpy as np
+from collections.abc import Iterable
 
 # Definitions
 # base_dir = "/media/davidolave/OS/Downloads/ai_datasets/diabetic-retinopathy-detection"
@@ -101,6 +102,33 @@ val_ds = val_ds.prefetch(buffer_size=AUTOTUNE)
 model = tf.keras.models.load_model (g_eval_model_h5_file_path)
 model.trainable = False  # Freeze the base model
 model.summary(show_trainable=True)
+
+# Test delete!!!
+resnet_model = model.layers[4]
+resnet_model.summary(show_trainable=True)
+# Test delete!!!
+
+# Print details of each layer
+for layer in resnet_model.layers:
+    print(f"Layer Name: {layer.name}")
+    print(f"Layer Type: {type(layer).__name__}")
+    if isinstance(layer, tf.keras.layers.Conv2D):
+        print(f"Layer: {layer.name}, Kernel Size: {layer.kernel_size}")
+    
+    # Extract input layer names using _inbound_nodes
+    input_layer_names = set()  # Use a set to avoid duplicates
+    for node in layer._inbound_nodes:
+        if (isinstance(node.inbound_layers, Iterable)):
+            for inbound_layer in node.inbound_layers:
+                input_layer_names.add(inbound_layer.name)
+        else:
+            input_layer_names.add (layer.input.name.split('/')[0])        
+                
+    print(f"Connected to: {', '.join(input_layer_names)}")
+    # input_layer_names = [inp.name.split('/')[0] for inp in layer.input if hasattr(inp, "name")]
+    # print(f"Layer: {layer.name}, Kernel Size: {layer.kernel_size}, Connected to: {', '.join(input_layer_names)}")
+    print(f"Output Shape: {layer.output_shape}")
+    print("-" * 30)
 
 # Get pretrained layer
 for layer in model.layers:
